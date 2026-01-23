@@ -21,7 +21,7 @@ namespace SVS_3DRooms
 		/*PLUGIN INFO*/
 		public const string PLUGIN_NAME = "SVS_3DRooms";
 		public const string COPYRIGHT = "";
-		public const string COMPANY = "";
+		public const string COMPANY = "https://github.com/TonWonton/SVS_3DRooms";
 
 		public const string PROCESS_NAME = "SamabakeScramble";
 		public const string GUID = "SVS_3DRooms";
@@ -101,7 +101,7 @@ namespace SVS_3DRooms
 			enabled.SettingChanged += OnEnabledChanged;
 
 			//Create hooks
-			Harmony.CreateAndPatchAll(typeof(ThreeDRoomsComponent.Hooks));
+			Harmony.CreateAndPatchAll(typeof(ThreeDRoomsComponent.Hooks), GUID);
 			Logging.Info("Loaded");
 		}
 

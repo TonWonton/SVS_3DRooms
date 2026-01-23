@@ -6,6 +6,7 @@
 
 # Ignore DLL dependency
 SVS_3DRooms/Lib/*.dll
+.editorconfig
 
 # User-specific files
 *.rsuser
