@@ -25,7 +25,7 @@ namespace SVS_3DRooms
 
 		public const string PROCESS_NAME = "SamabakeScramble";
 		public const string GUID = "SVS_3DRooms";
-		public const string VERSION = "1.0.0";
+		public const string VERSION = "1.0.1";
 
 		#endregion
 
@@ -62,23 +62,16 @@ namespace SVS_3DRooms
 
 
 		/*EVENT HANDLING*/
-		private static void OnEnabledChanged(object? sender, EventArgs e)
+		private static void OnEnabledChanged(object? sender, EventArgs args)
 		{
 			if (TryGetThreeDRoomsComponent(out ThreeDRoomsComponent? threeDRoomsComponent))
 			{
-				//Reset or reconfigure depending on if enabled
-				if (enabled.Value == false)
-				{
-					threeDRoomsComponent.ResetSimulationSceneCamera();
-				}
-				else
-				{
-					threeDRoomsComponent.UpdateSimulationSceneCameraConfig();
-				}
-
 				//Update displays
 				threeDRoomsComponent.SetBGBlurAndFramesDisplay();
 				threeDRoomsComponent.SetSimulationSceneModelsDisplay();
+
+				//Update camera config
+				threeDRoomsComponent.UpdateCameraConfig();
 			}
 		}
 

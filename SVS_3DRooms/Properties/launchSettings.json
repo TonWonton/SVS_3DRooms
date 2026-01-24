@@ -1,0 +1,12 @@
+﻿{
+	"profiles": {
+		"SamabakeScramble": {
+			"commandName": "Executable",
+			"executablePath": "D:\\Games\\SamabakeScramble\\SamabakeScramble.exe",
+			"workingDirectory": "D:\\Games\\SamabakeScramble",
+			"environmentVariables": {
+				"COMPLUS_ForceENC": "1"
+			}
+		}
+	}
+}

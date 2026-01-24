@@ -17,7 +17,8 @@ namespace SVS_3DRooms
 	{
 		public const int SIM_CAM_ORIG_STACK_INDEX = 1;
 
-		/*INSTANCE*/
+		/*VARIABLES*/
+		//Instance
 		public static ThreeDRoomsComponent? Instance { get; private set; }
 
 		//Camera
@@ -26,6 +27,7 @@ namespace SVS_3DRooms
 		//HScene
 		private HActor[] _hActors = null!;
 		private Camera _hSceneCamera = null!;
+		private UniversalAdditionalCameraData _hSceneCameraData = null!;
 		private Transform _hSceneCameraTransform = null!;
 
 		//SimulationScene
@@ -39,6 +41,7 @@ namespace SVS_3DRooms
 		private Quaternion _simulationSceneCameraOriginalRotation;
 		private float _simulationSceneCameraOriginalFOV = 50f;
 		private int _simulationSceneCameraOriginalStackIndex = SIM_CAM_ORIG_STACK_INDEX;
+		private bool _hSceneCameraOriginalClearDepth = true;
 		private bool _simulationSceneCameraOriginalClearDepth = true;
 
 		private Vector3 _simulationSceneCameraInitialPosition;
@@ -106,35 +109,53 @@ namespace SVS_3DRooms
 			_bgFrameBottom.SetActive(shouldShow);
 		}
 
-		public void ResetSimulationSceneCamera()
+		public void ResetCamera()
 		{
 			//Restore SimulationScene camera view
 			_simulationSceneCameraTransform.SetPositionAndRotation(_simulationSceneCameraOriginalPosition, _simulationSceneCameraOriginalRotation);
 
 			//Restore camera stack order
-			_cameraStackList.Remove(_simulationSceneCamera);
-			_cameraStackList.Insert(_simulationSceneCameraOriginalStackIndex, _simulationSceneCamera);
-
-			//Restore FOV and clear depth
-			_simulationSceneCamera.fieldOfView = _simulationSceneCameraOriginalFOV;
-			_simulationSceneCameraData.m_ClearDepth = _simulationSceneCameraOriginalClearDepth;
-		}
-
-		public void UpdateSimulationSceneCameraConfig()
-		{
-			if (ThreeDRoomsPlugin.enabled.Value)
+			Il2CppCollections.List<Camera> cameraStackList = _cameraStackList;
+			cameraStackList.Remove(_simulationSceneCamera);
+			if (_simulationSceneCameraOriginalStackIndex >= 0 && _simulationSceneCameraOriginalStackIndex < cameraStackList.Count)
 			{
-				//Reorder camera stack order
-				_cameraStackList.Remove(_simulationSceneCamera);
-				_cameraStackList.Add(_simulationSceneCamera);
-
-				//Set FOV and clear depth
-				_simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView;
-				_simulationSceneCameraData.m_ClearDepth = false;
+				cameraStackList.Insert(_simulationSceneCameraOriginalStackIndex,  _simulationSceneCamera);
 			}
 			else
 			{
-				ResetSimulationSceneCamera();
+				cameraStackList.Add(_simulationSceneCamera);
+			}
+
+			//Restore FOV and clear depth flag
+			_simulationSceneCamera.fieldOfView = _simulationSceneCameraOriginalFOV;
+
+			_simulationSceneCameraData.m_ClearDepth = _simulationSceneCameraOriginalClearDepth;
+			_hSceneCameraData.m_ClearDepth = _hSceneCameraOriginalClearDepth;
+		}
+
+		public void UpdateCameraConfig()
+		{
+			if (ThreeDRoomsPlugin.enabled.Value)
+			{
+				//Set camera stack order
+				Il2CppCollections.List<Camera> cameraStackList = _cameraStackList;
+
+				cameraStackList.Remove(_simulationSceneCamera);
+				cameraStackList.Add(_simulationSceneCamera);
+				
+				cameraStackList.Remove(_hSceneCamera);
+				cameraStackList.Add(_hSceneCamera);
+
+				//Set FOV and clear depth flag
+				_simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView;
+
+				_simulationSceneCameraData.m_ClearDepth = true;
+				_hSceneCameraData.m_ClearDepth = false;
+			}
+			else
+			{
+				//Reset
+				ResetCamera();
 			}
 		}
 
@@ -156,7 +177,7 @@ namespace SVS_3DRooms
 		//Setup
 		private void Start()
 		{
-			//Set simulation scene models and BG display
+			//Set simulation scene models, BG display, and HScene camera postProcessingEffects
 			SetSimulationSceneModelsDisplay();
 			SetBGBlurAndFramesDisplay();
 
@@ -185,31 +206,13 @@ namespace SVS_3DRooms
 			//Save original position and FOV
 			_simulationSceneCameraTransform.GetPositionAndRotation(out _simulationSceneCameraOriginalPosition, out _simulationSceneCameraOriginalRotation);
 			_simulationSceneCameraOriginalFOV = _simulationSceneCamera.fieldOfView;
-			_simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView;
 
-			//Get initial position
-			_simulationScene.tempAIs[characterIndex].transform.GetPositionAndRotation(out Vector3 initialPosition, out Quaternion initialRotation);
-			Quaternion zeroRotation = new Quaternion(0f, 0f, 0f, 1f);
+			//Save initial position
+			_simulationSceneCameraInitialPosition = _simulationScene.tempAIs[characterIndex].transform.position;
+			_simulationSceneCameraInitialRotation = new Quaternion(0f, 0f, 0f, 1f);
 
-			//Set initial position and rotation
-			_simulationSceneCameraTransform.SetPositionAndRotation(initialPosition, zeroRotation);
-			_simulationSceneCameraInitialPosition = initialPosition;
-			_simulationSceneCameraInitialRotation = zeroRotation;
-
-			//Set SimulationScene camera original stack index and depth
-			Il2CppCollections.List<Camera> cameraStackList = _cameraStackList;
-			int simulationSceneCameraInStackIndex = cameraStackList.IndexOf(_simulationSceneCamera);
-
-			if (simulationSceneCameraInStackIndex < 0 || simulationSceneCameraInStackIndex >= cameraStackList.Count)
-			{
-				simulationSceneCameraInStackIndex = SIM_CAM_ORIG_STACK_INDEX;
-			}
-
-			_simulationSceneCameraOriginalStackIndex = simulationSceneCameraInStackIndex;
-			_simulationSceneCameraOriginalClearDepth = _simulationSceneCameraData.m_ClearDepth;
-
-			//Set camera stack order, FOV, and depth
-			UpdateSimulationSceneCameraConfig();
+			//Update camera config
+			UpdateCameraConfig();
 		}
 
 		private void OnDestroy()
@@ -237,7 +240,7 @@ namespace SVS_3DRooms
 		/*EVENT HANDLING*/
 		private void OnHScenePreDispose()
 		{
-			ResetSimulationSceneCamera();
+			ResetCamera();
 			ShowSimulationSceneModels();
 			ShowBGBlurAndFrames();
 		}
@@ -271,7 +274,9 @@ namespace SVS_3DRooms
 				ThreeDRoomsComponent threeDRoomsComponent = ThreeDRoomsPlugin.GetOrAddThreeDRoomsComponent();
 				threeDRoomsComponent._hActors = __instance.Actors;
 				threeDRoomsComponent._hSceneCamera = __instance._mainCamera;
+				threeDRoomsComponent._hSceneCameraData = threeDRoomsComponent._hSceneCamera.GetUniversalAdditionalCameraData();
 				threeDRoomsComponent._hSceneCameraTransform = threeDRoomsComponent._hSceneCamera.transform;
+				threeDRoomsComponent._hSceneCameraOriginalClearDepth = threeDRoomsComponent._hSceneCameraData.m_ClearDepth;
 
 				//Find SimulationScene
 				var rootGameObjects = UnityEngine.SceneManagement.SceneManager.GetSceneByBuildIndex(4).GetRootGameObjects();
@@ -281,13 +286,14 @@ namespace SVS_3DRooms
 					{
 						threeDRoomsComponent._simulationScene = rootGameObject.GetComponent<SimulationScene>();
 						threeDRoomsComponent._simulationSceneCamera = threeDRoomsComponent._simulationScene.mainCamera;
-						threeDRoomsComponent._simulationSceneCameraData = threeDRoomsComponent._simulationSceneCamera.GetComponent<UniversalAdditionalCameraData>();
+						threeDRoomsComponent._simulationSceneCameraData = threeDRoomsComponent._simulationSceneCamera.GetUniversalAdditionalCameraData();
 						threeDRoomsComponent._simulationSceneCameraTransform = threeDRoomsComponent._simulationSceneCamera.transform;
+						threeDRoomsComponent._simulationSceneCameraOriginalClearDepth = threeDRoomsComponent._simulationSceneCameraData.m_ClearDepth;
 						break;
 					}
 				}
 
-				//Modify camera stack
+				//Find BaseCamera
 				Camera? baseCamera = null;
 				foreach (Camera camera in Camera.allCameras)
 				{
@@ -301,34 +307,47 @@ namespace SVS_3DRooms
 				if (baseCamera != null)
 				{
 					//Get camera stack
-					Il2CppCollections.List<Camera> baseCameraStackList = baseCamera.GetComponent<UniversalAdditionalCameraData>().cameraStack;
+					Il2CppCollections.List<Camera> baseCameraStackList = baseCamera.GetUniversalAdditionalCameraData().cameraStack;
 					threeDRoomsComponent._cameraStackList = baseCameraStackList;
 
-					foreach (Camera stackCamera in baseCameraStackList)
+					//Get SimulationScene camera original stack index
+					if (threeDRoomsComponent._simulationSceneCamera != null)
 					{
-						//Find hSceneCamera and simulationSceneCamera in stack
-						//Null check _simulationSceneCamera just in case
-						if (threeDRoomsComponent._simulationSceneCamera != null)
+						foreach (Camera stackCamera in baseCameraStackList)
 						{
-							if (stackCamera == threeDRoomsComponent._simulationSceneCamera)
+							if (threeDRoomsComponent._simulationSceneCamera == stackCamera)
 							{
-								threeDRoomsComponent._simulationSceneCameraData = stackCamera.GetComponent<UniversalAdditionalCameraData>();
+								int stackIndex = baseCameraStackList.IndexOf(stackCamera);
+								threeDRoomsComponent._simulationSceneCameraOriginalStackIndex = (stackIndex < 0 || stackIndex >= baseCameraStackList.Count) ? SIM_CAM_ORIG_STACK_INDEX : stackIndex;
+								break;
 							}
 						}
+					}
 
-						//If _simulationSceneCamera is null try to find by name instead and set references
-						else if (stackCamera.name == "Main Camera")
+					//If SimulationScene camera is null try to find by name
+					else
+					{
+						foreach (Camera stackCamera in baseCameraStackList)
 						{
-							threeDRoomsComponent._simulationSceneCamera = stackCamera;
-							threeDRoomsComponent._simulationSceneCameraData = stackCamera.GetComponent<UniversalAdditionalCameraData>();
+							if (stackCamera.name == "Main Camera")
+							{
+								threeDRoomsComponent._simulationSceneCamera = stackCamera;
+								threeDRoomsComponent._simulationSceneCameraData = threeDRoomsComponent._simulationSceneCamera.GetUniversalAdditionalCameraData();
+								threeDRoomsComponent._simulationSceneCameraTransform = threeDRoomsComponent._simulationSceneCamera.transform;
+								threeDRoomsComponent._simulationSceneCameraOriginalClearDepth = threeDRoomsComponent._simulationSceneCameraData.m_ClearDepth;
+
+								int stackIndex = baseCameraStackList.IndexOf(stackCamera);
+								threeDRoomsComponent._simulationSceneCameraOriginalStackIndex = (stackIndex < 0 || stackIndex >= baseCameraStackList.Count) ? SIM_CAM_ORIG_STACK_INDEX : stackIndex;
+								break;
+							}
 						}
 					}
-				}
 
-				Transform transform = SingletonInitializer<Game>.Instance.transform.GetComponentInChildren<HighPolyBackGroundFrame>().animFrame.transform;
-				threeDRoomsComponent._bgBlur = transform.Find("Panel").gameObject;
-				threeDRoomsComponent._bgFrameBottom = transform.Find("DownFrame").gameObject;
-				threeDRoomsComponent._bgFrameTop = transform.Find("UpFrame").gameObject;
+					Transform transform = SingletonInitializer<Game>.Instance.transform.GetComponentInChildren<HighPolyBackGroundFrame>().animFrame.transform;
+					threeDRoomsComponent._bgBlur = transform.Find("Panel").gameObject;
+					threeDRoomsComponent._bgFrameBottom = transform.Find("DownFrame").gameObject;
+					threeDRoomsComponent._bgFrameTop = transform.Find("UpFrame").gameObject;
+				}
 			}
 
 			/// <summary>
