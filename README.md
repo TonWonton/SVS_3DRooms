@@ -18,3 +18,4 @@
 - Toggle 3D rooms perspective on/off if [SVS_BepisPlugins](https://github.com/IllusionMods/BepisPlugins) and [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) is installed (already included in SVS-HF_Patch)
 
 ## Notes
+- The other camera post processing will be applied to the HScene camera if enabled (when they normally wouldn't)

@@ -1,14 +1,19 @@
 #nullable enable
+using System;
+using System.Collections.Generic;
 using HarmonyLib;
+using BepInEx;
+using BepInEx.Unity.IL2CPP;
 using ILLGames.Unity.Component;
 using Manager;
 using SV;
 using SV.H;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+using Character;
+
 using Logging = SVS_3DRooms.ThreeDRoomsPlugin.Logging;
 using Il2CppCollections = Il2CppSystem.Collections.Generic;
-using Character;
 
 
 namespace SVS_3DRooms
@@ -20,6 +25,7 @@ namespace SVS_3DRooms
 		/*VARIABLES*/
 		//Instance
 		public static ThreeDRoomsComponent? Instance { get; private set; }
+		private bool _isPovXCompatibility = false;
 
 		//Camera
 		private Il2CppCollections.List<Camera> _cameraStackList = null!;
@@ -43,7 +49,6 @@ namespace SVS_3DRooms
 		private int _simulationSceneCameraOriginalStackIndex = SIM_CAM_ORIG_STACK_INDEX;
 		private bool _hSceneCameraOriginalClearDepth = true;
 		private bool _simulationSceneCameraOriginalClearDepth = true;
-
 		private Vector3 _simulationSceneCameraInitialPosition;
 		private Quaternion _simulationSceneCameraInitialRotation;
 
@@ -52,9 +57,20 @@ namespace SVS_3DRooms
 		private GameObject _bgFrameTop = null!;
 		private GameObject _bgFrameBottom = null!;
 
+		//Properties
+		public HActor[] HActors { get { return _hActors; } }
+
+		//Events
+		public static event Action? Started;
+		public static event Action? Destroyed;
+
 
 
 		/*METHODS*/
+		public void SetPovXCompatibility() { _isPovXCompatibility = true; }
+		public bool TryDisablePovXCompatibility() { if (_isPovXCompatibility == true) { _isPovXCompatibility = false; return true; } else return false; }
+		public void UpdateSimulationSceneCameraFOV() { if (ThreeDRoomsPlugin.enabled.Value) _simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView; }
+
 		private void ShowSimulationSceneModels()
 		{
 			foreach (HActor hActor in _hActors)
@@ -119,7 +135,7 @@ namespace SVS_3DRooms
 			cameraStackList.Remove(_simulationSceneCamera);
 			if (_simulationSceneCameraOriginalStackIndex >= 0 && _simulationSceneCameraOriginalStackIndex < cameraStackList.Count)
 			{
-				cameraStackList.Insert(_simulationSceneCameraOriginalStackIndex,  _simulationSceneCamera);
+				cameraStackList.Insert(_simulationSceneCameraOriginalStackIndex, _simulationSceneCamera);
 			}
 			else
 			{
@@ -128,7 +144,6 @@ namespace SVS_3DRooms
 
 			//Restore FOV and clear depth flag
 			_simulationSceneCamera.fieldOfView = _simulationSceneCameraOriginalFOV;
-
 			_simulationSceneCameraData.m_ClearDepth = _simulationSceneCameraOriginalClearDepth;
 			_hSceneCameraData.m_ClearDepth = _hSceneCameraOriginalClearDepth;
 		}
@@ -142,13 +157,12 @@ namespace SVS_3DRooms
 
 				cameraStackList.Remove(_simulationSceneCamera);
 				cameraStackList.Add(_simulationSceneCamera);
-				
+
 				cameraStackList.Remove(_hSceneCamera);
 				cameraStackList.Add(_hSceneCamera);
 
 				//Set FOV and clear depth flag
 				_simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView;
-
 				_simulationSceneCameraData.m_ClearDepth = true;
 				_hSceneCameraData.m_ClearDepth = false;
 			}
@@ -159,13 +173,24 @@ namespace SVS_3DRooms
 			}
 		}
 
+		public void UpdateCameraPositionAndRotation()
+		{
+			if (ThreeDRoomsPlugin.enabled.Value)
+			{
+				Transform simulationSceneCameraTransform = _simulationSceneCameraTransform;
+				Transform hSceneCameraTransform = _hSceneCameraTransform;
+				simulationSceneCameraTransform.position = _simulationSceneCameraInitialPosition + hSceneCameraTransform.position;
+				simulationSceneCameraTransform.rotation = _simulationSceneCameraInitialRotation * hSceneCameraTransform.rotation;
+			}
+		}
+
 
 
 		/*UNITY METHODS*/
 		//Set SimulationScene camera position and rotation
 		private void LateUpdate()
 		{
-			if (ThreeDRoomsPlugin.enabled.Value)
+			if (_isPovXCompatibility == false && ThreeDRoomsPlugin.enabled.Value)
 			{
 				Transform simulationSceneCameraTransform = _simulationSceneCameraTransform;
 				Transform hSceneCameraTransform = _hSceneCameraTransform;
@@ -185,15 +210,19 @@ namespace SVS_3DRooms
 			int hActorsLength = _hActors.Length;
 			int characterIndex;
 
+			Logging.Info($"HScene has {hActorsLength} HActors.");
+
 			if (hActorsLength > 0)
 			{
 				if (hActorsLength > 1)
 				{
 					characterIndex = _hActors[1].Actor.charasGameParam.Index;
+					Logging.Info("Getting characterIndex from second HActor " + _hActors[1].Human.fileParam.fullname);
 				}
 				else
 				{
 					characterIndex = _hActors[0].Actor.charasGameParam.Index;
+					Logging.Info("Getting characterIndex from first HActor " + _hActors[0].Human.fileParam.fullname);
 				}
 			}
 			else
@@ -206,13 +235,19 @@ namespace SVS_3DRooms
 			//Save original position and FOV
 			_simulationSceneCameraTransform.GetPositionAndRotation(out _simulationSceneCameraOriginalPosition, out _simulationSceneCameraOriginalRotation);
 			_simulationSceneCameraOriginalFOV = _simulationSceneCamera.fieldOfView;
+			Logging.Info($"Saved SimulationScene camera original values - Position: {_simulationSceneCameraOriginalPosition}, Rotation: {_simulationSceneCameraOriginalRotation}, FOV: {_simulationSceneCameraOriginalFOV}");
 
 			//Save initial position
 			_simulationSceneCameraInitialPosition = _simulationScene.tempAIs[characterIndex].transform.position;
 			_simulationSceneCameraInitialRotation = new Quaternion(0f, 0f, 0f, 1f);
+			Logging.Info($"Saved SimulationScene camera initial position {_simulationSceneCameraInitialPosition} from character {_simulationScene.tempAIs[characterIndex].chaCtrl.fileParam.fullname}"); 
 
 			//Update camera config
 			UpdateCameraConfig();
+
+			//Invoke event
+			Started?.Invoke();
+			Logging.Info("ThreeDRoomsComponent setup finished" );
 		}
 
 		private void OnDestroy()
@@ -220,6 +255,7 @@ namespace SVS_3DRooms
 			if (Instance == this)
 			{
 				Instance = null;
+				Destroyed?.Invoke();
 			}
 		}
 
@@ -318,7 +354,7 @@ namespace SVS_3DRooms
 							if (threeDRoomsComponent._simulationSceneCamera == stackCamera)
 							{
 								int stackIndex = baseCameraStackList.IndexOf(stackCamera);
-								threeDRoomsComponent._simulationSceneCameraOriginalStackIndex = (stackIndex < 0 || stackIndex >= baseCameraStackList.Count) ? SIM_CAM_ORIG_STACK_INDEX : stackIndex;
+								threeDRoomsComponent._simulationSceneCameraOriginalStackIndex = (stackIndex >= 0 && stackIndex < baseCameraStackList.Count) ? stackIndex : SIM_CAM_ORIG_STACK_INDEX;
 								break;
 							}
 						}
@@ -337,7 +373,7 @@ namespace SVS_3DRooms
 								threeDRoomsComponent._simulationSceneCameraOriginalClearDepth = threeDRoomsComponent._simulationSceneCameraData.m_ClearDepth;
 
 								int stackIndex = baseCameraStackList.IndexOf(stackCamera);
-								threeDRoomsComponent._simulationSceneCameraOriginalStackIndex = (stackIndex < 0 || stackIndex >= baseCameraStackList.Count) ? SIM_CAM_ORIG_STACK_INDEX : stackIndex;
+								threeDRoomsComponent._simulationSceneCameraOriginalStackIndex = (stackIndex >= 0 && stackIndex < baseCameraStackList.Count) ? stackIndex : SIM_CAM_ORIG_STACK_INDEX;
 								break;
 							}
 						}

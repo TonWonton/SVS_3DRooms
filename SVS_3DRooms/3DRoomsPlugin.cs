@@ -25,7 +25,7 @@ namespace SVS_3DRooms
 
 		public const string PROCESS_NAME = "SamabakeScramble";
 		public const string GUID = "SVS_3DRooms";
-		public const string VERSION = "1.0.1";
+		public const string VERSION = "1.1.0";
 
 		#endregion
 
@@ -92,6 +92,9 @@ namespace SVS_3DRooms
 			//Config
 			enabled = Config.Bind(CATEGORY_3DROOMS, "Enabled", true);
 			enabled.SettingChanged += OnEnabledChanged;
+
+			//Compatibility
+			PovXCompatibility.Initialize();
 
 			//Create hooks
 			Harmony.CreateAndPatchAll(typeof(ThreeDRoomsComponent.Hooks), GUID);
