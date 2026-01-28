@@ -57,9 +57,6 @@ namespace SVS_3DRooms
 		private GameObject _bgFrameTop = null!;
 		private GameObject _bgFrameBottom = null!;
 
-		//Properties
-		public HActor[] HActors { get { return _hActors; } }
-
 		//Events
 		public static event Action? Started;
 		public static event Action? Destroyed;
@@ -69,7 +66,6 @@ namespace SVS_3DRooms
 		/*METHODS*/
 		public void SetPovXCompatibility() { _isPovXCompatibility = true; }
 		public bool TryDisablePovXCompatibility() { if (_isPovXCompatibility == true) { _isPovXCompatibility = false; return true; } else return false; }
-		public void UpdateSimulationSceneCameraFOV() { if (ThreeDRoomsPlugin.enabled.Value) _simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView; }
 
 		private void ShowSimulationSceneModels()
 		{
@@ -177,10 +173,11 @@ namespace SVS_3DRooms
 		{
 			if (ThreeDRoomsPlugin.enabled.Value)
 			{
-				Transform simulationSceneCameraTransform = _simulationSceneCameraTransform;
-				Transform hSceneCameraTransform = _hSceneCameraTransform;
-				simulationSceneCameraTransform.position = _simulationSceneCameraInitialPosition + hSceneCameraTransform.position;
-				simulationSceneCameraTransform.rotation = _simulationSceneCameraInitialRotation * hSceneCameraTransform.rotation;
+				_hSceneCameraTransform.GetPositionAndRotation(out Vector3 hSceneCameraPosition, out Quaternion hSceneCameraRotation);
+				_simulationSceneCameraTransform.SetPositionAndRotation(
+					_simulationSceneCameraInitialPosition + hSceneCameraPosition,
+					_simulationSceneCameraInitialRotation * hSceneCameraRotation
+				);
 			}
 		}
 
@@ -190,27 +187,36 @@ namespace SVS_3DRooms
 		//Set SimulationScene camera position and rotation
 		private void LateUpdate()
 		{
-			if (_isPovXCompatibility == false && ThreeDRoomsPlugin.enabled.Value)
+			if (ThreeDRoomsPlugin.enabled.Value)
 			{
-				Transform simulationSceneCameraTransform = _simulationSceneCameraTransform;
-				Transform hSceneCameraTransform = _hSceneCameraTransform;
-				simulationSceneCameraTransform.position = _simulationSceneCameraInitialPosition + hSceneCameraTransform.position;
-				simulationSceneCameraTransform.rotation = _simulationSceneCameraInitialRotation * hSceneCameraTransform.rotation;
+				//Always set FOV if enabled
+				_simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView;
+
+				//If PovX pov is not enabled set camera position and rotation
+				if (_isPovXCompatibility == false)
+				{
+					_hSceneCameraTransform.GetPositionAndRotation(out Vector3 hSceneCameraPosition, out Quaternion hSceneCameraRotation);
+					_simulationSceneCameraTransform.SetPositionAndRotation(
+						_simulationSceneCameraInitialPosition + hSceneCameraPosition,
+						_simulationSceneCameraInitialRotation * hSceneCameraRotation
+					);
+				}
 			}
 		}
 
 		//Setup
 		private void Start()
 		{
-			//Set simulation scene models, BG display, and HScene camera postProcessingEffects
-			SetSimulationSceneModelsDisplay();
-			SetBGBlurAndFramesDisplay();
+			//Save original position and FOV
+			_simulationSceneCameraTransform.GetPositionAndRotation(out _simulationSceneCameraOriginalPosition, out _simulationSceneCameraOriginalRotation);
+			_simulationSceneCameraOriginalFOV = _simulationSceneCamera.fieldOfView;
+			Logging.Info($"Saved SimulationScene camera original values: Position = {_simulationSceneCameraOriginalPosition}, Rotation = {_simulationSceneCameraOriginalRotation}, FOV = {_simulationSceneCameraOriginalFOV}");
 
 			//Get info and root position characterIndex
 			int hActorsLength = _hActors.Length;
 			int characterIndex;
 
-			Logging.Info($"HScene has {hActorsLength} HActors.");
+			Logging.Info($"HScene has {hActorsLength} HActors");
 
 			if (hActorsLength > 0)
 			{
@@ -227,27 +233,24 @@ namespace SVS_3DRooms
 			}
 			else
 			{
-				Logging.Error("No HActors found in HScene.");
+				Logging.Error("No HActors found in HScene");
 				Destroy(this);
 				return;
 			}
 
-			//Save original position and FOV
-			_simulationSceneCameraTransform.GetPositionAndRotation(out _simulationSceneCameraOriginalPosition, out _simulationSceneCameraOriginalRotation);
-			_simulationSceneCameraOriginalFOV = _simulationSceneCamera.fieldOfView;
-			Logging.Info($"Saved SimulationScene camera original values - Position: {_simulationSceneCameraOriginalPosition}, Rotation: {_simulationSceneCameraOriginalRotation}, FOV: {_simulationSceneCameraOriginalFOV}");
-
 			//Save initial position
 			_simulationSceneCameraInitialPosition = _simulationScene.tempAIs[characterIndex].transform.position;
 			_simulationSceneCameraInitialRotation = new Quaternion(0f, 0f, 0f, 1f);
-			Logging.Info($"Saved SimulationScene camera initial position {_simulationSceneCameraInitialPosition} from character {_simulationScene.tempAIs[characterIndex].chaCtrl.fileParam.fullname}"); 
+			Logging.Info($"Saved SimulationScene camera initial position = {_simulationSceneCameraInitialPosition} from character = {_simulationScene.tempAIs[characterIndex].chaCtrl.fileParam.fullname}");
 
-			//Update camera config
+			//Set simulation scene models, BG display, and update camera config
+			SetSimulationSceneModelsDisplay();
+			SetBGBlurAndFramesDisplay();
 			UpdateCameraConfig();
 
 			//Invoke event
 			Started?.Invoke();
-			Logging.Info("ThreeDRoomsComponent setup finished" );
+			Logging.Info("ThreeDRoomsComponent setup finished");
 		}
 
 		private void OnDestroy()
@@ -286,19 +289,6 @@ namespace SVS_3DRooms
 		//Component specific hooks
 		public static class Hooks
 		{
-			/// <summary>
-			/// Update FOV post <c>HScene.CameraLoad()</c> since it might be changed after. 
-			/// </summary>
-			[HarmonyPostfix]
-			[HarmonyPatch(typeof(HScene), nameof(HScene.CameraLoad))]
-			public static void HScenePostCameraLoad()
-			{
-				if (ThreeDRoomsPlugin.TryGetThreeDRoomsComponent(out ThreeDRoomsComponent? threeDRoomsComponent) && ThreeDRoomsPlugin.enabled.Value)
-				{
-					threeDRoomsComponent._simulationSceneCamera.fieldOfView = threeDRoomsComponent._hSceneCamera.fieldOfView;
-				}
-			}
-
 			/// <summary>
 			/// Set references at the very start to avoid null reference exceptions.
 			/// </summary>

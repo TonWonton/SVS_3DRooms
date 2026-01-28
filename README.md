@@ -1,7 +1,7 @@
 # SVS_3DRooms
 
 ## Description
-3D rooms plugin / MOD for `Samabake Scramble` / `サマバケ！すくらんぶる`. Moves the camera and perspective during HScenes so it "takes place" in the 3D maps.
+3D rooms plugin / MOD for `Samabake Scramble` / `サマバケ！すくらんぶる`. Moves the camera and perspective during HScenes so it takes place in the 3D maps.
 
 ## Prerequisites
 - [BepInEx Unity Il2Cpp](https://github.com/BepInEx/BepInEx)
@@ -16,3 +16,4 @@
 
 ## Features
 - Toggle 3D rooms perspective on/off if [SVS_BepisPlugins](https://github.com/IllusionMods/BepisPlugins) and [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) is installed (already included in SVS-HF_Patch)
+- Compatible with SVS_PovX
