@@ -25,7 +25,7 @@ namespace SVS_3DRooms
 
 		public const string PROCESS_NAME = "SamabakeScramble";
 		public const string GUID = "SVS_3DRooms";
-		public const string VERSION = "1.1.1";
+		public const string VERSION = "1.1.2";
 
 		#endregion
 

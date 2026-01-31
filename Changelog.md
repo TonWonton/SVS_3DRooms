@@ -8,3 +8,6 @@
 ### v1.1.1
 - Fixed lag spike from the plugin when a HScene starts
 - Misc. optimization
+
+### v1.1.2
+- Fixed bug where characters would be outside the map or incorrect position

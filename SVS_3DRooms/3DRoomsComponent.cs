@@ -31,6 +31,7 @@ namespace SVS_3DRooms
 		private Il2CppCollections.List<Camera> _cameraStackList = null!;
 
 		//HScene
+		private HScene _hScene = null!;
 		private HActor[] _hActors = null!;
 		private Camera _hSceneCamera = null!;
 		private UniversalAdditionalCameraData _hSceneCameraData = null!;
@@ -69,17 +70,11 @@ namespace SVS_3DRooms
 
 		private void ShowSimulationSceneModels()
 		{
-			foreach (HActor hActor in _hActors)
+			foreach (SV.Chara.AI simulationAI in _hScene.parameter.LowPolyAI)
 			{
-				if (hActor != null)
+				if (simulationAI != null)
 				{
-					//Get character SimulationScene info
-					int characterIndex = hActor.Actor.charasGameParam.Index;
-					SV.Chara.AI simulationAI = _simulationScene.tempAIs[characterIndex];
-					Human simulationHuman = simulationAI.chaCtrl;
-
-					//Show character model and circle
-					simulationHuman.visibleAll = true;
+					simulationAI.chaCtrl.visibleAll = true;
 					simulationAI.objCircle.SetActive(true);
 				}
 			}
@@ -89,17 +84,11 @@ namespace SVS_3DRooms
 		{
 			bool shouldShow = !ThreeDRoomsPlugin.enabled.Value;
 
-			foreach (HActor hActor in _hActors)
+			foreach (SV.Chara.AI simulationAI in _hScene.parameter.LowPolyAI)
 			{
-				if (hActor != null)
+				if (simulationAI != null)
 				{
-					//Get character SimulationScene info
-					int characterIndex = hActor.Actor.charasGameParam.Index;
-					SV.Chara.AI simulationAI = _simulationScene.tempAIs[characterIndex];
-					Human simulationHuman = simulationAI.chaCtrl;
-
-					//Hide character model and circle
-					simulationHuman.visibleAll = shouldShow;
+					simulationAI.chaCtrl.visibleAll = shouldShow;
 					simulationAI.objCircle.SetActive(shouldShow);
 				}
 			}
@@ -169,10 +158,12 @@ namespace SVS_3DRooms
 			}
 		}
 
-		public void UpdateCameraPositionAndRotation()
+		public void UpdateCameraFOVPositionAndRotation()
 		{
 			if (ThreeDRoomsPlugin.enabled.Value)
 			{
+				_simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView;
+
 				_hSceneCameraTransform.GetPositionAndRotation(out Vector3 hSceneCameraPosition, out Quaternion hSceneCameraRotation);
 				_simulationSceneCameraTransform.SetPositionAndRotation(
 					_simulationSceneCameraInitialPosition + hSceneCameraPosition,
@@ -187,20 +178,16 @@ namespace SVS_3DRooms
 		//Set SimulationScene camera position and rotation
 		private void LateUpdate()
 		{
-			if (ThreeDRoomsPlugin.enabled.Value)
+			//If enabled and PovX not active set camera position and rotation
+			if (ThreeDRoomsPlugin.enabled.Value && _isPovXCompatibility == false)
 			{
-				//Always set FOV if enabled
 				_simulationSceneCamera.fieldOfView = _hSceneCamera.fieldOfView;
 
-				//If PovX pov is not enabled set camera position and rotation
-				if (_isPovXCompatibility == false)
-				{
-					_hSceneCameraTransform.GetPositionAndRotation(out Vector3 hSceneCameraPosition, out Quaternion hSceneCameraRotation);
-					_simulationSceneCameraTransform.SetPositionAndRotation(
-						_simulationSceneCameraInitialPosition + hSceneCameraPosition,
-						_simulationSceneCameraInitialRotation * hSceneCameraRotation
-					);
-				}
+				_hSceneCameraTransform.GetPositionAndRotation(out Vector3 hSceneCameraPosition, out Quaternion hSceneCameraRotation);
+				_simulationSceneCameraTransform.SetPositionAndRotation(
+					_simulationSceneCameraInitialPosition + hSceneCameraPosition,
+					_simulationSceneCameraInitialRotation * hSceneCameraRotation
+				);
 			}
 		}
 
@@ -212,36 +199,10 @@ namespace SVS_3DRooms
 			_simulationSceneCameraOriginalFOV = _simulationSceneCamera.fieldOfView;
 			Logging.Info($"Saved SimulationScene camera original values: Position = {_simulationSceneCameraOriginalPosition}, Rotation = {_simulationSceneCameraOriginalRotation}, FOV = {_simulationSceneCameraOriginalFOV}");
 
-			//Get info and root position characterIndex
-			int hActorsLength = _hActors.Length;
-			int characterIndex;
-
-			Logging.Info($"HScene has {hActorsLength} HActors");
-
-			if (hActorsLength > 0)
-			{
-				if (hActorsLength > 1)
-				{
-					characterIndex = _hActors[1].Actor.charasGameParam.Index;
-					Logging.Info("Getting characterIndex from second HActor " + _hActors[1].Human.fileParam.fullname);
-				}
-				else
-				{
-					characterIndex = _hActors[0].Actor.charasGameParam.Index;
-					Logging.Info("Getting characterIndex from first HActor " + _hActors[0].Human.fileParam.fullname);
-				}
-			}
-			else
-			{
-				Logging.Error("No HActors found in HScene");
-				Destroy(this);
-				return;
-			}
-
 			//Save initial position
-			_simulationSceneCameraInitialPosition = _simulationScene.tempAIs[characterIndex].transform.position;
+			_simulationSceneCameraInitialPosition = _hScene.parameter.Transform.position;
 			_simulationSceneCameraInitialRotation = new Quaternion(0f, 0f, 0f, 1f);
-			Logging.Info($"Saved SimulationScene camera initial position = {_simulationSceneCameraInitialPosition} from character = {_simulationScene.tempAIs[characterIndex].chaCtrl.fileParam.fullname}");
+			Logging.Info($"Saved SimulationScene camera initial values: Position = {_simulationSceneCameraInitialPosition}, Rotation = {_simulationSceneCameraInitialRotation}");
 
 			//Set simulation scene models, BG display, and update camera config
 			SetSimulationSceneModelsDisplay();
@@ -298,6 +259,7 @@ namespace SVS_3DRooms
 			{
 				//Create Component and set _hScene
 				ThreeDRoomsComponent threeDRoomsComponent = ThreeDRoomsPlugin.GetOrAddThreeDRoomsComponent();
+				threeDRoomsComponent._hScene = __instance;
 				threeDRoomsComponent._hActors = __instance.Actors;
 				threeDRoomsComponent._hSceneCamera = __instance._mainCamera;
 				threeDRoomsComponent._hSceneCameraData = threeDRoomsComponent._hSceneCamera.GetUniversalAdditionalCameraData();

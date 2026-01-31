@@ -132,7 +132,7 @@ namespace SVS_3DRooms
 				if (ThreeDRoomsPlugin.TryGetThreeDRoomsComponent(out ThreeDRoomsComponent? threeDRoomsComponent))
 				{
 					threeDRoomsComponent.SetPovXCompatibility();
-					threeDRoomsComponent.UpdateCameraPositionAndRotation();
+					threeDRoomsComponent.UpdateCameraFOVPositionAndRotation();
 				}
 			}
 
@@ -143,7 +143,7 @@ namespace SVS_3DRooms
 				{
 					if (ThreeDRoomsPlugin.TryGetThreeDRoomsComponent(out ThreeDRoomsComponent? threeDRoomsComponent) && threeDRoomsComponent.TryDisablePovXCompatibility())
 					{
-						threeDRoomsComponent.UpdateCameraPositionAndRotation();
+						threeDRoomsComponent.UpdateCameraFOVPositionAndRotation();
 					}
 				}
 			}
