@@ -34,7 +34,7 @@
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<Exec Command="powershell -Command &quot;Stop-Process -Name 'SamabakeScramble'&quot;" ContinueOnError="true" />
 		<Exec Command="xcopy &quot;$(TargetPath)&quot; &quot;D:\Games\SamabakeScramble\BepInEx\Plugins\&quot; /s /i /y" />
-		<Exec Condition="'$(Configuration)' == 'Release'" Command="xcopy &quot;$(TargetPath)&quot; &quot;D:\Projects\ILL\SVS\Releases\SVS_3DRooms\BepInEx\plugins\&quot; /s /i /y" />
+		<Exec Condition="'$(Configuration)' == 'Release'" Command="xcopy &quot;$(TargetPath)&quot; &quot;D:\Projects\ILL\Releases\SVS_3DRooms\BepInEx\plugins\&quot; /s /i /y" />
 		<Exec Condition="'$(Configuration)' == 'Debug'" Command="powershell -Command &quot;Start-Process 'D:\Games\SamabakeScramble\SamabakeScramble.exe'&quot;" ContinueOnError="true" />
 	</Target>
 

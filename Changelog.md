@@ -11,3 +11,6 @@
 
 ### v1.1.2
 - Fixed bug where characters would be outside the map or incorrect position
+
+### v1.1.3
+- Fix plugin not working properly on steam version
