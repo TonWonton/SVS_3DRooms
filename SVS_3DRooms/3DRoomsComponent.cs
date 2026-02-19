@@ -1,6 +1,5 @@
 #nullable enable
 using System;
-using System.Collections.Generic;
 using HarmonyLib;
 using BepInEx;
 using BepInEx.Unity.IL2CPP;
@@ -10,7 +9,6 @@ using SV;
 using SV.H;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
-using Character;
 
 using Logging = SVS_3DRooms.ThreeDRoomsPlugin.Logging;
 using Il2CppCollections = Il2CppSystem.Collections.Generic;
@@ -20,6 +18,7 @@ namespace SVS_3DRooms
 {
 	public class ThreeDRoomsComponent : MonoBehaviour
 	{
+		public const int HSCENE_CAM_ORIG_STACK_INDEX = 4;
 		public const int SIM_CAM_ORIG_STACK_INDEX = 1;
 
 		/*VARIABLES*/
@@ -32,31 +31,31 @@ namespace SVS_3DRooms
 
 		//HScene
 		private HScene _hScene = null!;
-		private HActor[] _hActors = null!;
 		private Camera _hSceneCamera = null!;
 		private UniversalAdditionalCameraData _hSceneCameraData = null!;
 		private Transform _hSceneCameraTransform = null!;
+		private int _hSceneCameraOriginalStackIndex = HSCENE_CAM_ORIG_STACK_INDEX;
+		private bool _hSceneCameraOriginalClearDepth = true;
 
 		//SimulationScene
 		private SimulationScene _simulationScene = null!;
 		private Camera _simulationSceneCamera = null!;
 		private UniversalAdditionalCameraData _simulationSceneCameraData = null!;
 		private Transform _simulationSceneCameraTransform = null!;
-
-		//Saved values
-		private Vector3 _simulationSceneCameraOriginalPosition;
-		private Quaternion _simulationSceneCameraOriginalRotation;
 		private float _simulationSceneCameraOriginalFOV = 50f;
 		private int _simulationSceneCameraOriginalStackIndex = SIM_CAM_ORIG_STACK_INDEX;
-		private bool _hSceneCameraOriginalClearDepth = true;
 		private bool _simulationSceneCameraOriginalClearDepth = true;
+
+		//Saved positions
+		private Vector3 _simulationSceneCameraOriginalPosition;
+		private Quaternion _simulationSceneCameraOriginalRotation;
 		private Vector3 _simulationSceneCameraInitialPosition;
 		private Quaternion _simulationSceneCameraInitialRotation;
 
 		//BG blur and frame
-		private GameObject _bgBlur = null!;
-		private GameObject _bgFrameTop = null!;
-		private GameObject _bgFrameBottom = null!;
+		private GameObject? _bgBlur;
+		private GameObject? _bgFrameTop;
+		private GameObject? _bgFrameBottom;
 
 		//Events
 		public static event Action? Started;
@@ -96,18 +95,18 @@ namespace SVS_3DRooms
 
 		private void ShowBGBlurAndFrames()
 		{
-			_bgBlur.SetActive(true);
-			_bgFrameTop.SetActive(true);
-			_bgFrameBottom.SetActive(true);
+			if (_bgBlur != null) _bgBlur.SetActive(true);
+			if (_bgFrameTop != null) _bgFrameTop.SetActive(true);
+			if (_bgFrameBottom != null) _bgFrameBottom.SetActive(true);
 		}
 
 		public void SetBGBlurAndFramesDisplay()
 		{
 			bool shouldShow = !ThreeDRoomsPlugin.enabled.Value;
 
-			_bgBlur.SetActive(shouldShow);
-			_bgFrameTop.SetActive(shouldShow);
-			_bgFrameBottom.SetActive(shouldShow);
+			if (_bgBlur != null) _bgBlur.SetActive(shouldShow);
+			if (_bgFrameTop != null) _bgFrameTop.SetActive(shouldShow);
+			if (_bgFrameBottom != null) _bgFrameBottom.SetActive(shouldShow);
 		}
 
 		public void ResetCamera()
@@ -257,17 +256,27 @@ namespace SVS_3DRooms
 			[HarmonyPatch(typeof(HScene), nameof(HScene.Start))]
 			public static void HScenePostStart(HScene __instance)
 			{
+				Logging.Info("Trying to set up ThreeDRoomsComponent");
+
 				//Create Component and set _hScene
 				ThreeDRoomsComponent threeDRoomsComponent = ThreeDRoomsPlugin.GetOrAddThreeDRoomsComponent();
 				threeDRoomsComponent._hScene = __instance;
-				threeDRoomsComponent._hActors = __instance.Actors;
 				threeDRoomsComponent._hSceneCamera = __instance._mainCamera;
 				threeDRoomsComponent._hSceneCameraData = threeDRoomsComponent._hSceneCamera.GetUniversalAdditionalCameraData();
 				threeDRoomsComponent._hSceneCameraTransform = threeDRoomsComponent._hSceneCamera.transform;
 				threeDRoomsComponent._hSceneCameraOriginalClearDepth = threeDRoomsComponent._hSceneCameraData.m_ClearDepth;
 
 				//Find SimulationScene
-				var rootGameObjects = UnityEngine.SceneManagement.SceneManager.GetSceneByBuildIndex(4).GetRootGameObjects();
+				UnityEngine.SceneManagement.Scene simulationScene = UnityEngine.SceneManagement.SceneManager.GetSceneByName("Simulation");
+				if (simulationScene.IsValid() == false || simulationScene.isLoaded == false)
+				{
+					Logging.Error("Simulation Scene not found, destroying ThreeDRoomsComponent");
+					Destroy(threeDRoomsComponent);
+					return;
+				}
+
+				//Find SimulationScene components
+				var rootGameObjects = simulationScene.GetRootGameObjects();
 				foreach (GameObject rootGameObject in rootGameObjects)
 				{
 					if (rootGameObject.name == "SimulationScene")
@@ -279,6 +288,12 @@ namespace SVS_3DRooms
 						threeDRoomsComponent._simulationSceneCameraOriginalClearDepth = threeDRoomsComponent._simulationSceneCameraData.m_ClearDepth;
 						break;
 					}
+				}
+				if (threeDRoomsComponent._simulationScene == null)
+				{
+					Logging.Error("SimulationScene component not found, destroying ThreeDRoomsComponent");
+					Destroy(threeDRoomsComponent);
+					return;
 				}
 
 				//Find BaseCamera
@@ -303,11 +318,17 @@ namespace SVS_3DRooms
 					{
 						foreach (Camera stackCamera in baseCameraStackList)
 						{
-							if (threeDRoomsComponent._simulationSceneCamera == stackCamera)
+							if (stackCamera == threeDRoomsComponent._simulationSceneCamera)
 							{
 								int stackIndex = baseCameraStackList.IndexOf(stackCamera);
 								threeDRoomsComponent._simulationSceneCameraOriginalStackIndex = (stackIndex >= 0 && stackIndex < baseCameraStackList.Count) ? stackIndex : SIM_CAM_ORIG_STACK_INDEX;
-								break;
+								continue;
+							}
+							else if (stackCamera == threeDRoomsComponent._hSceneCamera)
+							{
+								int stackIndex = baseCameraStackList.IndexOf(stackCamera);
+								threeDRoomsComponent._hSceneCameraOriginalStackIndex = (stackIndex >= 0 && stackIndex < baseCameraStackList.Count) ? stackIndex : HSCENE_CAM_ORIG_STACK_INDEX;
+								continue;
 							}
 						}
 					}
@@ -330,11 +351,21 @@ namespace SVS_3DRooms
 							}
 						}
 					}
+				}
+				else
+				{
+					Logging.Error("Base camera not found, destroying ThreeDRoomsComponent");
+					Destroy(threeDRoomsComponent);
+					return;
+				}
 
-					Transform transform = SingletonInitializer<Game>.Instance.transform.GetComponentInChildren<HighPolyBackGroundFrame>().animFrame.transform;
-					threeDRoomsComponent._bgBlur = transform.Find("Panel").gameObject;
-					threeDRoomsComponent._bgFrameBottom = transform.Find("DownFrame").gameObject;
-					threeDRoomsComponent._bgFrameTop = transform.Find("UpFrame").gameObject;
+				var bgFrame = SingletonInitializer<Game>.Instance.transform.GetComponentInChildren<HighPolyBackGroundFrame>();
+				if (bgFrame != null)
+				{
+					Transform bgTransform = bgFrame.animFrame.transform;
+					threeDRoomsComponent._bgBlur = bgTransform.Find("Panel")?.gameObject;
+					threeDRoomsComponent._bgFrameBottom = bgTransform.Find("DownFrame")?.gameObject;
+					threeDRoomsComponent._bgFrameTop = bgTransform.Find("UpFrame")?.gameObject;
 				}
 			}
 
